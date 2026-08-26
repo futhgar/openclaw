@@ -23,7 +23,11 @@ import {
   toolFrame,
 } from "./tui-pty-rendering-test-support.js";
 const STARTUP_TIMEOUT_MS = 20_000;
-const TEST_TIMEOUT_MS = 5_000;
+// Covers write -> recorded send -> rendered frame for one PTY exchange. 5_000
+// could not cover all three on a loaded runner: the render is starved after the
+// send is confirmed, so the test died before the observation budget could report
+// a useful diagnostic. Keep this strictly ABOVE OUTPUT_TIMEOUT_MS (10_000).
+const TEST_TIMEOUT_MS = 15_000;
 const STARTUP_TEST_TIMEOUT_MS = 25_000;
 
 const countFixtureCalls = (entries: FixtureLogEntry[], method: string) =>
@@ -750,15 +754,16 @@ describe.sequential("TUI PTY harness", () => {
     "renders redacted, cause-aware send failures in the real terminal loop",
     async () => {
       await fixture.run.write("tui error redaction proof\r");
-      await fixture.run.waitForOutput("send failed: gateway down");
-      await fixture.run.waitForOutput("Authorization: Bearer");
-
-      expect(fixture.run.visibleOutput()).not.toContain("sk-abcdefghijklmnopqrstuv");
+      // Same ordering rule as the xAI case: confirm the recorded send first.
       await fixture.waitForLogEntry(
         (entry) =>
           entry.method === "sendChat" &&
           objectFieldEquals(entry, "message", "tui error redaction proof"),
       );
+      await fixture.run.waitForOutput("send failed: gateway down");
+      await fixture.run.waitForOutput("Authorization: Bearer");
+
+      expect(fixture.run.visibleOutput()).not.toContain("sk-abcdefghijklmnopqrstuv");
     },
     TEST_TIMEOUT_MS,
   );

@@ -19,7 +19,16 @@ import { startPty, type PtyRun } from "./tui-pty-test-support.js";
 export * from "./tui-pty-harness-assertion-test-support.js";
 
 const activeRuns: PtyRun[] = [];
-const OUTPUT_TIMEOUT_MS = 2_000;
+// Budget for a single PTY observation (terminal output or fixture-log entry).
+// Must stay strictly BELOW the owning test's ceiling (TEST_TIMEOUT_MS, 15_000 in
+// tui-pty-harness.e2e.test.ts) so a slow observation fails here - surfacing the
+// captured PTY frame and fixture log - instead of being cut off by Vitest's outer
+// timeout, which discards those diagnostics.
+//
+// 2_000 was too tight: a PTY round-trip through a tsx-loaded TUI overshot it by
+// ~1% under CPU contention (observed 2017ms / 2014ms), turning contention into a
+// flake with no useful error.
+const OUTPUT_TIMEOUT_MS = 10_000;
 const EXIT_TIMEOUT_MS = 4_000;
 
 export async function disposeActiveTuiFixtures(): Promise<void> {
